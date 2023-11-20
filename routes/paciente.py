@@ -46,7 +46,7 @@ def get_pacientes():
     if estado:
         query = query.filter(Paciente.estado == estado)
 
-    query = query.order_by(Paciente.nome)
+    query = query.order_by(Paciente.id)
     # Execute a consulta
     pacientes = query.all()
 

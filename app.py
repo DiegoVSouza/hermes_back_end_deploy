@@ -18,6 +18,11 @@ from routes.medico import medico_bp
 from routes.modelo import modelo_bp
 from models import Pessoa
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required
+import base64
+import scipy as sp
+from scipy import ndimage
+from tensorflow import keras
+from keras.models import  Model
 
 app = Flask(__name__)
 
@@ -29,15 +34,35 @@ jwt = JWTManager(app)
 # Carrega o modelo .h5
 model1 = tf.keras.models.load_model('./modeloXception.h5')
 model2 = tf.keras.models.load_model('./CNN_modelvgg19.h5')
+model3 = tf.keras.models.load_model('./model-13-0.9788-27092023.h5')
 models = []
 models.append(model1)
 models.append(model2)
+models.append(model3)
 
-db_user = 'postgres'
-db_password = '123'
-db_host = 'localhost'
+gap_weights = model3.layers[-1].get_weights()[0]
+cam_model  = Model(inputs=[model3.input], outputs=[model3.layers[-8].output, model3.output])
+
+def cam_result(features, results) -> tuple:
+  # there is only one image in the batch so we index at `0`
+  features_for_img = features[0]
+  prediction = results[0][0]
+  # there is only one unit in the output so we get the weights connected to it
+  class_activation_weights = gap_weights[:,0]
+  # upsample to the image size
+  class_activation_features = sp.ndimage.zoom(features_for_img, (224/7, 224/7, 1), order=2)
+  #spline interpolation of order = 2 (G search)
+  # compute the intensity of each feature in the CAM
+  cam_output  = np.dot(class_activation_features, class_activation_weights)
+  return prediction, cam_output
+
+db_user = 'hermesdb'
+db_password = 'Hermes123@'
+db_host = 'mkevhyeqmzumyegx6spv3b2qmc5kaa-primary.postgresql.sa-saopaulo-1.oc1.oraclecloud.com'
 db_port = '5432'
 db_name = 'hermesdb'
+# jdbc:postgresql://:5432/seu-banco-de-dados
+
 
 connection_string = f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
 app.config['SQLALCHEMY_DATABASE_URI'] = connection_string
@@ -70,13 +95,23 @@ def predict(model_id):
         image = tf.cast(image, tf.float32) / 255.0
         model = models[model_id - 1]
      
-        predictions = model.predict(image)
-        predictions = predictions.tolist()
-        print(predictions)
-        data = {'predictions': predictions}
-        response = jsonify(data)
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        return response
+        
+        if model_id == 3:
+            features, results = cam_model.predict(image)
+            result, map_act = cam_result(features, results)
+            imagem_base64 = base64.b64encode(map_act.read()).decode('utf-8')
+            data = {'predictions': result, 'image':imagem_base64}
+            response = jsonify(data)
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            return response
+        else:
+            predictions = model.predict(image)
+            predictions = predictions.tolist()
+            print(predictions)
+            data = {'predictions': predictions}
+            response = jsonify(data)
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            return response
     except Exception as e:
         response = jsonify({'error': str(e)})
         return response

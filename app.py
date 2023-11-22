@@ -33,15 +33,13 @@ jwt = JWTManager(app)
 
 # Carrega o modelo .h5
 model1 = tf.keras.models.load_model('./modeloXception.h5')
-model2 = tf.keras.models.load_model('./CNN_modelvgg19.h5')
-model3 = tf.keras.models.load_model('./model-13-0.9788-27092023.h5')
+model2 = tf.keras.models.load_model('./model-13-0.9788-27092023.h5')
 models = []
 models.append(model1)
 models.append(model2)
-models.append(model3)
 
-gap_weights = model3.layers[-1].get_weights()[0]
-cam_model  = Model(inputs=[model3.input], outputs=[model3.layers[-8].output, model3.output])
+gap_weights = model2.layers[-1].get_weights()[0]
+cam_model  = Model(inputs=[model2.input], outputs=[model2.layers[-8].output, model2.output])
 
 def cam_result(features, results) -> tuple:
   # there is only one image in the batch so we index at `0`
